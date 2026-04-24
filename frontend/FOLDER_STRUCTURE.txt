@@ -1,0 +1,23 @@
+Swiftnote Frontend - Folder Structure
+=====================================
+
+swiftnote-frontend/
+├── .gitignore
+├── .nvmrc
+├── eslint.config.js
+├── index.html
+├── package-lock.json
+├── package.json
+├── README.md
+├── tsconfig.app.json
+├── tsconfig.json
+├── tsconfig.node.json
+├── vite.config.ts
+├── public/
+│   └── (empty)
+├── src/
+│   ├── index.css
+│   ├── main.tsx
+│   └── SwiftnoteApp.tsx
+└── node_modules/
+    └── (dependencies)
