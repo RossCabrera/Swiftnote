@@ -5,8 +5,38 @@ from datetime import timedelta
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
-from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
+from django.contrib.auth.models import AbstractUser, BaseUserManager
+
+
+class UserManager(BaseUserManager):
+    """ Define a model manager for User model with no username field """
+    def _create_user(self, email, password=None, **extra_fields):
+        """ Create and save a User with the given email and password """
+        if not email:
+            raise ValueError('The given email must be set')
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_user(self, email, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', False)
+        extra_fields.setdefault('is_superuser', False)
+        return self._create_user(email, password, **extra_fields)
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        """ Create and save a SuperUser with the given email and password """
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError('Superuser must have is_staff=True.')
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError('Superuser must have is_superuser=True.')
+
+        return self._create_user(email, password, **extra_fields)
 
 
 class User(AbstractUser):
@@ -16,6 +46,8 @@ class User(AbstractUser):
 
     avatar = models.URLField(_('avatar URL'), max_length=500, blank=True, null=True)
     is_verified = models.BooleanField(_('verified status'),default=False)
+    
+    objects: UserManager = UserManager()
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
@@ -33,6 +65,7 @@ class EmailVerificationToken(models.Model):
         related_name="verification_tokens",
         verbose_name=_("user") 
     )
+
     token = models.CharField(_("token"), max_length=255, unique=True) 
     created_at = models.DateTimeField(_("created at"), auto_now_add=True)
     expires_at = models.DateTimeField(_("expires at"))
@@ -56,6 +89,7 @@ class EmailVerificationToken(models.Model):
     def __str__(self):
         return f"Token for {self.user.email} - Valid: {not self.is_expired}"
     
+
 class PasswordResetToken(models.Model):
     """ Model to store password reset tokens for users """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
