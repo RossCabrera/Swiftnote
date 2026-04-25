@@ -30,14 +30,18 @@ erDiagram
     uuid id PK
     uuid user_id FK
     string token UK
+    datetime creates_at
     datetime expires_at
     boolean is_used
   }
   
   PASSWORD_RESET_TOKEN {
+    uuid id PK
     uuid user_id FK
     string token UK
     datetime created_at
+    datetime expires_at
+    boolean is_used
   }
   
   CATEGORY {
@@ -81,6 +85,7 @@ erDiagram
 | id         | UUID (PK)  | Unique identifier for the token record.               |
 | user_id    | FK (User)  | Links the token to a specific user account.           |
 | token      | String     | Unique, secure string sent in the verification email. |
+| creates_at | DateTime   | Used to calculate if the token has expired.           |
 | expires_at | DateTime   | Enforces a time limit on the verification link.       |
 | is_used    | Boolean    | Prevents the link from being used more than once.     |
 
@@ -90,9 +95,12 @@ erDiagram
 
 | Field      | Type      | Description / Constraints                         |
 |------------|-----------|---------------------------------------------------|
+| id         | UUID (PK) | Unique identifier for the token record.           |
 | user_id    | FK (User) | Identifies which user is requesting the reset.    |
 | token      | String    | Unique string used to validate the reset request. |
-| created_at | DateTime  | Used to calculate if the token has expired.       |
+| creates_at | DateTime  | Used to calculate if the token has expired.       |
+| expires_at | DateTime  | Enforces a time limit on the verification link.   |
+| is_used    | Boolean   | Prevents the link from being used more than once. |
 
 ---
 
