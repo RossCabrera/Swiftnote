@@ -16,6 +16,7 @@ class UserManager(BaseUserManager):
         if not email:
             raise ValueError('The given email must be set')
         email = self.normalize_email(email)
+        extra_fields.pop('username', None)
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
@@ -42,6 +43,7 @@ class UserManager(BaseUserManager):
 class User(AbstractUser):
     """ Custom user model that abstracts the default Django user"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    username = None
     email = models.EmailField(_('email address'), unique=True)
 
     avatar = models.URLField(_('avatar URL'), max_length=500, blank=True, null=True)
