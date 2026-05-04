@@ -1,8 +1,10 @@
+from datetime import timedelta
+
 import resend
 from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils import timezone
-from datetime import timedelta
+
 from .models import EmailVerificationToken
 
 resend.api_key = settings.RESEND_API_KEY

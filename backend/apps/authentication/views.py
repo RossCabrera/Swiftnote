@@ -1,17 +1,16 @@
 from typing import cast
 
 from django.contrib.auth import get_user_model
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.views import APIView
 from django.db import transaction
+from rest_framework import status
 from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.views import APIView
 
-# Local imports
+from .models import EmailVerificationToken
+from .models import User as SwiftUser
 from .serializers import RegistrationSerializer
-from .models import EmailVerificationToken, User as SwiftUser # 
-
 from .utils import send_verification_email
 
 User = get_user_model()

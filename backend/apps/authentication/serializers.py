@@ -1,8 +1,10 @@
-from rest_framework import serializers
-from rest_framework.validators import UniqueValidator
 from django.contrib.auth.password_validation import validate_password
 from django.core.validators import validate_email as django_validate_email
+from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
+
 from .models import User
+
 
 class RegistrationSerializer(serializers.ModelSerializer):
     """ Serializer for user registration with robust validation """
