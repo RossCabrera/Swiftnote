@@ -23,7 +23,12 @@ DEBUG = env('DEBUG')
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 
 # ======================================================
-# 3. APPLICATIONS
+# 3. EXTERNAL SERVICES / API KEYS
+# ======================================================
+RESEND_API_KEY = env('RESEND_API_KEY')
+
+# ======================================================
+# 4. APPLICATIONS
 # ======================================================
 DJANGO_APPS = [
     'django.contrib.admin',
@@ -47,12 +52,12 @@ LOCAL_APPS = [
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 # ======================================================
-# 4. AUTH
+# 5. AUTH
 # ======================================================
 AUTH_USER_MODEL = 'authentication.User'
 
 # ======================================================
-# 5. MIDDLEWARE
+# 6. MIDDLEWARE
 # ======================================================
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -66,25 +71,25 @@ MIDDLEWARE = [
 ]
 
 # ======================================================
-# 6. URLS & WSGI
+# 7. URLS & WSGI
 # ======================================================
 ROOT_URLCONF = 'config.urls'
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # ======================================================
-# 7. DATABASE
+# 8. DATABASE
 # ======================================================
 DATABASES = {
     'default': env.db('DATABASE_URL')
 }
 
 # ======================================================
-# 8. CORS
+# 9. CORS
 # ======================================================
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS')
 
 # ======================================================
-# 9. DJANGO REST FRAMEWORK
+# 10. DJANGO REST FRAMEWORK
 # ======================================================
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -103,12 +108,14 @@ REST_FRAMEWORK = {
         'anon': '100/day',
         'user': '1000/day',
         'registration': '5/hour',
+        'verify_email': '10/hour',
+        'resend_email': '1/hour',
     },
 }
 
 
 # ======================================================
-# 10. JWT CONFIGURATION
+# 11. JWT CONFIGURATION
 # ======================================================
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=env.int('JWT_ACCESS_TOKEN_LIFETIME_MINUTES', default=60)),
@@ -120,7 +127,7 @@ SIMPLE_JWT = {
 }
 
 # ======================================================
-# 11. TEMPLATES
+# 12. TEMPLATES
 # ======================================================
 TEMPLATES = [
     {
@@ -138,7 +145,7 @@ TEMPLATES = [
 ]
 
 # ======================================================
-# 12. PASSWORD VALIDATION
+# 13. PASSWORD VALIDATION
 # ======================================================
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -148,7 +155,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # ======================================================
-# 13. INTERNATIONALIZATION
+# 14. INTERNATIONALIZATION
 # ======================================================
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
@@ -157,7 +164,7 @@ USE_I18N = True
 USE_TZ = True
 
 # ======================================================
-# 14. STATIC & MEDIA FILES
+# 15. STATIC & MEDIA FILES
 # ======================================================
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
@@ -166,6 +173,6 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # ======================================================
-# 15. DEFAULT FIELD TYPE
+# 16. DEFAULT FIELD TYPE
 # ======================================================
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
