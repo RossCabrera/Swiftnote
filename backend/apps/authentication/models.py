@@ -1,6 +1,6 @@
 import secrets
 import uuid
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
@@ -51,24 +51,31 @@ class User(AbstractUser):
     email = models.EmailField(_('email address'), unique=True)
 
     avatar = models.URLField(_('avatar URL'), max_length=500, blank=True, null=True)
-    is_verified = models.BooleanField(_('verified status'),default=False)
-    
+    is_verified = models.BooleanField(_('verified status'), default=False)
+
+    date_of_birth = models.DateField(_('date of birth'), blank=True, null=True)
+
     objects: UserManager = UserManager()
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
 
     @property
+    def age(self):
+        """Calculate age on the fly based on current date and date_of_birth."""
+        if self.date_of_birth:
+            today = date.today()
+            return today.year - self.date_of_birth.year - (
+                (today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day)
+            )
+        return None
+
+    @property
     def full_name(self):
         """Return user's full name or fallback to email prefix."""
         if self.first_name and self.last_name:
             return f"{self.first_name} {self.last_name}"
-        elif self.first_name:
-            return self.first_name
-        elif self.last_name:
-            return self.last_name
-        else:
-            return self.email.split('@')[0]
+        return self.first_name or self.last_name or self.email.split('@')[0]
 
     def __str__(self):
         return self.email
