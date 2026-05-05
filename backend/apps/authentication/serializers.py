@@ -1,9 +1,10 @@
+from datetime import date
 from typing import Any, Dict, cast
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
-from django.utils.translation import gettext_lazy as _
 from django.core.validators import validate_email as django_validate_email
+from django.utils.translation import gettext_lazy as _
 from rest_framework import exceptions, serializers
 from rest_framework.validators import UniqueValidator
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -72,7 +73,7 @@ class RegistrationSerializer(serializers.ModelSerializer):
     
     class Meta: 
         model = User
-        fields = ('email', 'first_name', 'last_name', 'password', 'password_confirm')
+        fields = ('email', 'first_name', 'last_name', 'date_of_birth', 'password', 'password_confirm')
         extra_kwargs = {
             'first_name': {'required': False, 'allow_blank': True},
             'last_name': {'required': False, 'allow_blank': True},
@@ -81,6 +82,16 @@ class RegistrationSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         """Normalize email to lowercase"""
         return value.lower()
+    
+    def validate_date_of_birth(self, value):
+        if value:
+            today = date.today()
+            age = today.year - value.year - (
+                (today.month, today.day) < (value.month, value.day)
+            )
+            if age < 13:
+                raise serializers.ValidationError("You must be at least 13 years old.")
+        return value
     
     def validate(self, attrs):
         """Ensure passwords match"""
@@ -151,9 +162,11 @@ class SwiftNoteTokenObtainPairSerializer(TokenObtainPairSerializer):
             'id': str(user.id),
             'uuid': str(user.id),  
             'email': user.email,
-            'full_name': user.full_name,
             'first_name': user.first_name,
             'last_name': user.last_name,
+            'full_name': user.full_name,
+            'date_of_birth': user.date_of_birth.isoformat() if user.date_of_birth else None,
+            'age': user.age,
             'is_verified': user.is_verified,
         }
         
