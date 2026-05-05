@@ -1,8 +1,7 @@
-# apps/authentication/views.py
-
 import logging
-from typing import cast, Dict, Any, Optional
+from typing import Any, Dict, Optional, cast
 
+import requests
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils.translation import gettext_lazy as _
@@ -16,13 +15,11 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import EmailVerificationToken, PasswordResetToken
 from .models import User as SwiftUser
-from .serializers import (
-    RegistrationSerializer,
-    SwiftNoteTokenObtainPairSerializer,
-    PasswordResetRequestSerializer,
-    PasswordResetConfirmSerializer,
-)
-from .utils import send_verification_email, send_password_reset_email
+from .serializers import (PasswordResetConfirmSerializer,
+                          PasswordResetRequestSerializer,
+                          RegistrationSerializer,
+                          SwiftNoteTokenObtainPairSerializer)
+from .utils import send_password_reset_email, send_verification_email
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -372,3 +369,100 @@ class PasswordResetVerifyView(APIView):
                 {"error": _("Invalid token.")},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+class GoogleLoginView(APIView):
+    """
+    POST /api/auth/google/
+    
+    Authenticate with Google OAuth2.
+    Expected payload: {"access_token": "google_access_token"}
+    """
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        access_token = request.data.get('access_token')
+        
+        if not access_token:
+            return Response(
+                {"error": _("Google access token is required.")},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify token with Google
+        google_response = requests.get(
+            'https://www.googleapis.com/oauth2/v3/userinfo',
+            headers={'Authorization': f'Bearer {access_token}'}
+        )
+        
+        if google_response.status_code != 200:
+            return Response(
+                {"error": _("Invalid Google token.")},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        google_data = google_response.json()
+        email = google_data.get('email', '').lower()
+        first_name = google_data.get('given_name', '')
+        last_name = google_data.get('family_name', '')
+        avatar = google_data.get('picture', '')
+        
+        if not email:
+            return Response(
+                {"error": _("Email not provided by Google.")},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Find or create user
+        user = SwiftUser.objects.filter(email=email).first()
+    
+        
+        if user:
+            # Existing user
+            if not user.is_verified:
+                return Response(
+                    {"error": _("Please verify your email first. Check your inbox or request a new verification link.")},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Update missing info
+            if not user.first_name and first_name:
+                user.first_name = first_name
+            if not user.last_name and last_name:
+                user.last_name = last_name
+            if not user.avatar and avatar:
+                user.avatar = avatar
+
+            if any([first_name and not user.first_name, 
+                    last_name and not user.last_name, 
+                    avatar and not user.avatar]):
+                user.save()
+        else:
+            # New user
+            user = SwiftUser.objects.create_user(
+                email=email,
+                password=None,
+                first_name=first_name,
+                last_name=last_name,
+                avatar=avatar,
+                is_verified=True,
+                is_active=True
+            )
+        
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': str(user.id),
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'full_name': user.full_name,
+                'avatar': user.avatar,
+                'date_of_birth': user.date_of_birth.isoformat() if user.date_of_birth else None,
+                'age': user.age,
+                'is_verified': user.is_verified,
+            }
+        })
