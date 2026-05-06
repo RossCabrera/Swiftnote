@@ -1,6 +1,7 @@
-import environ
-from pathlib import Path
 from datetime import timedelta
+from pathlib import Path
+
+import environ
 
 # ======================================================
 # 1. BASE & ENVIRONMENT
@@ -23,7 +24,12 @@ DEBUG = env('DEBUG')
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 
 # ======================================================
-# 3. APPLICATIONS
+# 3. EXTERNAL SERVICES / API KEYS
+# ======================================================
+RESEND_API_KEY = env('RESEND_API_KEY')
+
+# ======================================================
+# 4. APPLICATIONS
 # ======================================================
 DJANGO_APPS = [
     'django.contrib.admin',
@@ -37,6 +43,7 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     'rest_framework',
     'corsheaders',
+    'rest_framework_simplejwt.token_blacklist',
 ]
 
 LOCAL_APPS = [
@@ -47,12 +54,12 @@ LOCAL_APPS = [
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 # ======================================================
-# 4. AUTH
+# 5. AUTH
 # ======================================================
-# AUTH_USER_MODEL = 'authentication.User'
+AUTH_USER_MODEL = 'authentication.User'
 
 # ======================================================
-# 5. MIDDLEWARE
+# 6. MIDDLEWARE
 # ======================================================
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -66,46 +73,72 @@ MIDDLEWARE = [
 ]
 
 # ======================================================
-# 6. URLS & WSGI
+# 7. URLS & WSGI
 # ======================================================
 ROOT_URLCONF = 'config.urls'
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # ======================================================
-# 7. DATABASE
+# 8. DATABASE
 # ======================================================
 DATABASES = {
     'default': env.db('DATABASE_URL')
 }
 
 # ======================================================
-# 8. CORS
+# 9. CORS
 # ======================================================
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS')
 
 # ======================================================
-# 9. DJANGO REST FRAMEWORK
+# 10. DJANGO REST FRAMEWORK
 # ======================================================
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    # Throttling
+        'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/day',
+        'user': '1000/day',
+        'registration': '5/hour',
+        'verify_email': '10/hour',
+        'resend_email': '10/hour',
+        'password_reset': '3/hour',        
+        'password_reset_confirm': '5/hour'
+    },
 }
 
+
 # ======================================================
-# 10. JWT CONFIGURATION
+# 11. JWT CONFIGURATION
 # ======================================================
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': True,
+
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': env('SECRET_KEY'),
+
     'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_FIELD': 'id', 
+    'USER_ID_CLAIM': 'user_id',
+
 }
 
 # ======================================================
-# 11. TEMPLATES
+# 12. TEMPLATES
 # ======================================================
 TEMPLATES = [
     {
@@ -123,7 +156,7 @@ TEMPLATES = [
 ]
 
 # ======================================================
-# 12. PASSWORD VALIDATION
+# 13. PASSWORD VALIDATION
 # ======================================================
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -133,7 +166,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # ======================================================
-# 13. INTERNATIONALIZATION
+# 14. INTERNATIONALIZATION
 # ======================================================
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
@@ -142,7 +175,7 @@ USE_I18N = True
 USE_TZ = True
 
 # ======================================================
-# 14. STATIC & MEDIA FILES
+# 15. STATIC & MEDIA FILES
 # ======================================================
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
@@ -150,7 +183,52 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+LOCALE_PATHS = [
+    BASE_DIR / 'locale',
+]
+
 # ======================================================
-# 15. DEFAULT FIELD TYPE
+# 16. DEFAULT FIELD TYPE
 # ======================================================
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ======================================================
+# 17. LOGGING
+# ======================================================
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {asctime} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': 'debug.log',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'apps.authentication': { 
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}

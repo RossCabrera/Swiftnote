@@ -1,0 +1,14 @@
+<!-- templates/emails/verify_email.html -->
+{% load i18n %}
+<!DOCTYPE html>
+<html>
+<body>
+    <h2>{% trans "Welcome to Swiftnote!" %}</h2>
+    <p>{% trans "Hello" %} {{ user_full_name }},</p>
+    <p>{% trans "Please verify your email address to start taking notes." %}</p>
+    <a href="{{ verify_url }}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+        {% trans "Verify My Email" %}
+    </a>
+    <p>{% trans "This link will expire in 24 hours." %}</p>
+</body>
+</html>
