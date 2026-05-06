@@ -20,7 +20,6 @@ erDiagram
   USER {
     uuid id PK
     string email UK
-    string username
     string password 
     first_name string
     last_name string
