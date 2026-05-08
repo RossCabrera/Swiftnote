@@ -2,6 +2,7 @@ import logging
 from typing import Any, Dict, Optional, cast
 
 import requests
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils.translation import gettext_lazy as _
@@ -10,6 +11,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -24,6 +27,28 @@ from .utils import send_password_reset_email, send_verification_email
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
+REFRESH_COOKIE_NAME = 'refresh_token'
+
+
+def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    """
+    Attach the refresh token as a secure, httpOnly cookie to the response.
+    - httponly=True  → JavaScript cannot read it (XSS protection)
+    - secure=True    → Only sent over HTTPS (set based on DEBUG flag)
+    - samesite='Lax' → Sent on same-site requests and top-level navigation (CSRF protection)
+    - path           → Scoped to auth endpoints so the cookie isn't sent on every request
+    """
+    max_age = int(settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds())
+    response.set_cookie(
+        key=REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite='Lax',
+        max_age=max_age,
+        path='/api/auth/',
+    )
+
 
 class RegisterView(APIView):
     """
@@ -36,7 +61,6 @@ class RegisterView(APIView):
     throttle_scope = 'registration'
 
     def post(self, request) -> Response:
-        # Safely get data - request.data is typically a dict
         data: Dict[str, Any] = request.data if request.data is not None else {}
         serializer = RegistrationSerializer(data=data)
         
@@ -72,7 +96,6 @@ class VerifyEmailView(APIView):
     throttle_scope = 'verify_email'
 
     def post(self, request) -> Response:
-        # Safely get data
         data: Dict[str, Any] = request.data if request.data is not None else {}
         token_str: Optional[str] = data.get('token')
         
@@ -131,7 +154,6 @@ class ResendVerificationView(APIView):
     throttle_scope = 'resend_email'
 
     def post(self, request) -> Response:
-        # Safely get data
         data: Dict[str, Any] = request.data if request.data is not None else {}
         email: Optional[str] = data.get('email')
         
@@ -142,7 +164,6 @@ class ResendVerificationView(APIView):
             )
 
         try:
-            # Cast to SwiftUser to access is_verified
             user = cast(SwiftUser, User.objects.get(email=email.lower()))
             
             if user.is_verified:
@@ -159,14 +180,12 @@ class ResendVerificationView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Always return same message for security (don't reveal if user exists)
             return Response(
                 {"message": _("If an account exists, a verification link has been sent.")},
                 status=status.HTTP_200_OK
             )
 
         except User.DoesNotExist:
-            # Always return same message for security
             return Response(
                 {"message": _("If an account exists, a verification link has been sent.")},
                 status=status.HTTP_200_OK
@@ -176,48 +195,112 @@ class ResendVerificationView(APIView):
 class LoginView(TokenObtainPairView):
     """
     POST /api/auth/login/
-    
-    Authenticate a user and return JWT access/refresh tokens.
-    Uses custom serializer to check email verification status.
+
+    Authenticate a user and return a JWT access token in the body.
+    The refresh token is set as a secure httpOnly cookie — never exposed to JavaScript.
     """
     serializer_class = SwiftNoteTokenObtainPairSerializer
 
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            refresh_token = response.data.pop('refresh', None)
+            if refresh_token:
+                _set_refresh_cookie(response, refresh_token)
+        return response
+
+
+class CookieTokenRefreshView(APIView):
+    """
+    POST /api/auth/refresh/
+
+    Silently refreshes the access token using the httpOnly refresh cookie.
+    Returns a new access token in the response body.
+    The refresh cookie is automatically updated if token rotation is enabled.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request) -> Response:
+        refresh_token = request.COOKIES.get(REFRESH_COOKIE_NAME)
+
+        if not refresh_token:
+            return Response(
+                {"error": _("Refresh token not found.")},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        serializer = TokenRefreshSerializer(data={'refresh': refresh_token})
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError:
+            return Response(
+                {"error": _("Refresh token is invalid or has expired. Please log in again.")},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        response = Response({'access': str(serializer.validated_data['access'])})
+
+        if 'refresh' in serializer.validated_data:
+            _set_refresh_cookie(response, str(serializer.validated_data['refresh']))
+
+        return response
 
 class LogoutView(APIView):
     """
     POST /api/auth/logout/
-    
-    Blacklist the refresh token to log out the user.
-    Requires authentication.
+
+    Blacklists the refresh token (read from the httpOnly cookie) and clears the cookie.
     """
     permission_classes = (permissions.IsAuthenticated,)
 
     def post(self, request) -> Response:
-        try:
-            # Safely get data
-            data = cast(Dict[str, Any], request.data)
-            refresh_token = data.get("refresh")
-            
-            if not refresh_token:
-                return Response(
-                    {"error": _("Refresh token is required.")},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-            
+        refresh_token = request.COOKIES.get(REFRESH_COOKIE_NAME)
+
+        if not refresh_token:
             return Response(
-                {"message": _("Successfully logged out.")},
-                status=status.HTTP_205_RESET_CONTENT
-            )
-        except Exception as e:
-            logger.warning(f"Logout failed: {e}")
-            return Response(
-                {"error": _("Invalid token.")},
+                {"error": _("Refresh token not found.")},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except Exception as e:
+            logger.warning(f"Logout blacklist failed: {e}")
+
+        response = Response(
+            {"message": _("Successfully logged out.")},
+            status=status.HTTP_205_RESET_CONTENT
+        )
+        response.delete_cookie(REFRESH_COOKIE_NAME, path='/api/auth/')
+        return response
+
+
+class CurrentUserView(APIView):
+    """
+    GET /api/auth/current-user/
+
+    Returns the currently authenticated user's profile.
+    Called by the frontend on every page load (checkSession) to restore
+    the user object from the httpOnly cookie session without a full login.
+    Requires a valid access token in the Authorization header.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request) -> Response:
+        user = cast(SwiftUser, request.user)
+        return Response({
+            'id': str(user.id),
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'full_name': user.full_name,
+            'avatar': user.avatar,
+            'date_of_birth': user.date_of_birth.isoformat() if user.date_of_birth else None,
+            'age': user.age,
+            'is_verified': user.is_verified,
+        })
+
 
 class PasswordResetRequestView(APIView):
     """
@@ -230,7 +313,6 @@ class PasswordResetRequestView(APIView):
     throttle_scope = 'password_reset'
 
     def post(self, request) -> Response:
-        # Safely get data
         data = cast(Dict[str, Any], request.data if request.data is not None else {})
         serializer = PasswordResetRequestSerializer(data=data)
         
@@ -241,7 +323,6 @@ class PasswordResetRequestView(APIView):
         email = valid_data.get('email')
         
         try:
-            # Cast to SwiftUser to access is_verified
             user = cast(SwiftUser, User.objects.get(email=email))
             
             if user.is_verified:
@@ -253,14 +334,12 @@ class PasswordResetRequestView(APIView):
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR
                     )
             
-            # Always return same message for security
             return Response(
                 {"message": _("If an account exists with this email, you will receive a password reset link.")},
                 status=status.HTTP_200_OK
             )
             
         except User.DoesNotExist:
-            # Same message for security - don't reveal if email exists
             return Response(
                 {"message": _("If an account exists with this email, you will receive a password reset link.")},
                 status=status.HTTP_200_OK
@@ -277,7 +356,6 @@ class PasswordResetConfirmView(APIView):
     throttle_scope = 'password_reset_confirm'
 
     def post(self, request) -> Response:
-        # Safely get data
         data = cast(Dict[str, Any], request.data)
         serializer = PasswordResetConfirmSerializer(data=data)
         
@@ -304,6 +382,13 @@ class PasswordResetConfirmView(APIView):
                 )
             
             user = cast(SwiftUser, token_obj.user)
+
+            if user.check_password(new_password):
+                return Response(
+                    {"error": _("Your new password must be different from your current password.")},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             user.set_password(new_password)
             user.save()
             
@@ -334,7 +419,6 @@ class PasswordResetVerifyView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request) -> Response:
-        # Safely get data
         data: Dict[str, Any] = request.data if request.data is not None else {}
         token_str: Optional[str] = data.get('token')
         
@@ -412,19 +496,16 @@ class GoogleLoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Find or create user
         user = SwiftUser.objects.filter(email=email).first()
     
         
         if user:
-            # Existing user
             if not user.is_verified:
                 return Response(
                     {"error": _("Please verify your email first. Check your inbox or request a new verification link.")},
                     status=status.HTTP_403_FORBIDDEN
                 )
             
-            # Update missing info
             if not user.first_name and first_name:
                 user.first_name = first_name
             if not user.last_name and last_name:
@@ -437,7 +518,6 @@ class GoogleLoginView(APIView):
                     avatar and not user.avatar]):
                 user.save()
         else:
-            # New user
             user = SwiftUser.objects.create_user(
                 email=email,
                 password=None,
@@ -447,13 +527,12 @@ class GoogleLoginView(APIView):
                 is_verified=True,
                 is_active=True
             )
-        
-        # Generate JWT tokens
+
+
         refresh = RefreshToken.for_user(user)
-        
-        return Response({
+
+        response = Response({
             'access': str(refresh.access_token),
-            'refresh': str(refresh),
             'user': {
                 'id': str(user.id),
                 'email': user.email,
@@ -466,3 +545,5 @@ class GoogleLoginView(APIView):
                 'is_verified': user.is_verified,
             }
         })
+        _set_refresh_cookie(response, str(refresh))
+        return response
