@@ -119,7 +119,6 @@ class SwiftNoteTokenObtainPairSerializer(TokenObtainPairSerializer):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Customize login field error messages
         self.fields['email'].error_messages = {
             'required': _('Email is required.'),
             'blank': _('Email cannot be blank.'),
@@ -130,11 +129,10 @@ class SwiftNoteTokenObtainPairSerializer(TokenObtainPairSerializer):
         }
     
     def validate(self, attrs):
-        # Attempt authentication
+        # Try to authenticate, if it fails check for verification status
         try:
             data = cast(Dict[str, Any], super().validate(attrs))
         except exceptions.AuthenticationFailed as e:
-            # Check if user exists but is unverified for better error message
             email = attrs.get('email', '').lower()
             try:
                 user = cast(SwiftUser, User.objects.get(email=email)) 
@@ -144,14 +142,13 @@ class SwiftNoteTokenObtainPairSerializer(TokenObtainPairSerializer):
                     )
             except User.DoesNotExist:
                 pass
-            # Re-raise with generic message for security
             raise exceptions.AuthenticationFailed(
                 _("Invalid email or password.")
             ) from e
         
         user = cast(SwiftUser, self.user)
         
-        # Double-check verification status (security)
+        # Double-check verification status 
         if not user.is_verified:
             raise exceptions.AuthenticationFailed(
                 _("Your email is not verified. Please check your inbox.")
@@ -180,11 +177,11 @@ class SwiftNoteTokenObtainPairSerializer(TokenObtainPairSerializer):
         user = cast(SwiftUser, user)
         token = super().get_token(user)
         
-        # Add custom claims
+        # Custom claims
         token['email'] = user.email
         token['user_id'] = str(user.id)
         
-        # Add name claims (optional, useful for frontend)
+        # Name claims
         if user.first_name:
             token['first_name'] = user.first_name
         if user.last_name:
