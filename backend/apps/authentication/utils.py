@@ -19,7 +19,7 @@ def send_verification_email(user):
     Returns:
         tuple: (success: bool, message: str)
     """
-    # Check for tokens created in the last 60 seconds (rate limiting)
+    
     recent_token = EmailVerificationToken.objects.filter(
         user=user, 
         created_at__gte=timezone.now() - timedelta(minutes=1)
@@ -28,11 +28,9 @@ def send_verification_email(user):
     if recent_token:
         return False, force_str(_("Please wait a minute before requesting another email."))
 
-    # Create the Token 
     token_obj = EmailVerificationToken.objects.create(user=user)
     
-    # Prepare the Email
-    verify_url = f"https://swiftnote.app/verify?token={token_obj.token}"
+    verify_url = f"{settings.FRONTEND_URL}/verify-email?token={token_obj.token}"
 
 
 
@@ -43,7 +41,6 @@ def send_verification_email(user):
     
     html_content = render_to_string('emails/verify_email.html', context)
     
-    # Email subject - convert to string for Resend API
     subject = force_str(_("Confirm your email for Swiftnote"))
 
     try:
@@ -65,7 +62,7 @@ def send_password_reset_email(user):
     Returns:
         tuple: (success: bool, message: str)
     """
-    # Check for recent password reset tokens (rate limiting)
+    
     recent_token = PasswordResetToken.objects.filter(
         user=user,
         created_at__gte=timezone.now() - timedelta(minutes=1)
@@ -74,11 +71,9 @@ def send_password_reset_email(user):
     if recent_token:
         return False, force_str(_("Please wait a minute before requesting another password reset email."))
     
-    # Create the Token
     token_obj = PasswordResetToken.objects.create(user=user)
     
-    # Prepare the Email
-    reset_url = f"https://swiftnote.app/reset-password?token={token_obj.token}"
+    reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token_obj.token}"
     context = {
         'reset_url': reset_url,
         'expires_hours': 2,
@@ -87,7 +82,6 @@ def send_password_reset_email(user):
     
     html_content = render_to_string('emails/password_reset.html', context)
     
-    # Email subject - convert to string for Resend API
     subject = force_str(_("Reset your Swiftnote password"))
 
     try:
