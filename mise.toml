@@ -1,0 +1,19 @@
+[tools]
+python = "3.13.3"
+bun = "1.3.14"
+
+[tasks.db]
+description = "Start Swiftnote DB"
+run = "docker compose -f docker-compose.dev.yml up -d db"
+
+[tasks.backend]
+description = "Start Django dev server"
+run = "cd backend && python manage.py runserver"
+
+[tasks.frontend]
+description = "Start React dev server"
+run = "cd frontend && bun dev"
+
+[tasks.migrate]
+description = "Run migrations"
+run = "cd backend && python manage.py makemigrations && python manage.py migrate"
